@@ -1,0 +1,538 @@
+---
+title: "Project"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '4'
+  html_notebook:
+    df_print: paged
+    toc: yes
+    toc_depth: 4
+---
+
+
+## 
+
+```{r}
+df <- read.csv("/Users/dshukla/MS/Regression/project/car_dekho.csv")
+library(stringr)
+library(ggplot2)
+library(gridExtra)
+library(grid)
+library(car)
+```
+
+```{r}
+head(df); str(df)
+```
+### Data Preproccessing
+```{r}
+library(tidyr)
+
+df$engine_cc <- as.numeric(str_split_fixed(df$engine, " ", 2)[,1])
+df$max_power_bhp <- as.numeric(str_split_fixed(df$max_power, " ", 2)[,1])
+df$mileage_kmpl <- as.numeric(str_split_fixed(df$mileage, " ", 2)[,1])
+df$brand <- str_split_fixed(df$name, " ", 2)[,1]
+df$age=  2021- as.numeric(df$year)
+df$selling_price <- df$selling_price/73.78
+```
+
+### EDA
+```{r}
+
+variables <- c("age","brand","km_driven","fuel","seller_type","transmission","owner","seats","engine_cc","max_power_bhp","mileage_kmpl","selling_price")
+df_clean <- df[,variables]
+
+str(df_clean)
+```
+
+### Check for NA's
+```{r}
+num_cols <- df_clean[,sapply(df_clean,is.numeric)]
+summary(num_cols)
+
+na.val  <- lapply(df_clean,function(x) mean(is.na(x)) * 100)
+na.df = data.frame( variable = names(na.val), 
+            percentage.na =round(as.numeric( sapply(na.val, "[", 1) ),2))
+print(na.df)
+```
+
+
+
+```{r}
+library(dplyr)
+imp_brand <- df_clean %>% group_by(brand)%>% count() %>%arrange(desc(n)) %>% filter(n > 50)
+df_model_clean <- df_clean[df_clean$brand %in% unique(imp_brand$brand),]
+dim(df_model_clean)
+df_model <- df_model_clean[!is.na(df_model_clean$seats) & !is.na(df_model_clean$max_power_bhp),]
+dim(df_model)
+
+
+```
+```{r}
+check <- df_model_clean[is.na(df_model_clean$seats) & is.na(df_model_clean$max_power_bhp),]
+head(check)
+```
+```{r}
+
+df_model[df_model$selling_price < 407,]
+
+df_model[df_model$selling_price > 130000,]
+
+```
+
+```{r}
+str(df_model_clean)
+```
+
+```{r}
+df_model_clean[df_model_clean$km_driven < 2, ]
+```
+```{r}
+df_model_clean[df_model_clean$km_driven > 1000000, ]
+```
+
+
+### Categorical columns distribution
+```{r}
+cat_cols <- df_model[,sapply(df_model,is.character)]
+lapply(cat_cols, function(x) table(x))
+```
+
+```{r}
+par(mfrow = c(1,2))
+hist(df_model$selling_price, main= paste("selling_price"), breaks = 50,probability = TRUE)
+
+hist(log(df_model$selling_price), main= paste("log of selling_price"), breaks = 50,probability = TRUE)
+```
+
+```{r}
+# library(hrbrthemes)
+# 
+# for  (feature in colnames(cat_cols)) {
+#   
+# p <-  (ggplot(data=df_model, aes(x= log(selling_price), group= df_model[,feature], fill=df_model[,feature])) +
+#     geom_density() +
+#     theme_ipsum()) 
+# 
+# print(p + scale_fill_discrete(name = feature))
+# }
+```
+
+```{r,fig.width=7,fig.height=4.4}
+p1 <- ggplot(df_model, aes(x=brand, y=log(selling_price), fill=brand)) + 
+  geom_boxplot()+labs(title=paste0("Selling Price  by brand"),x= 'brand', y = "log Selling Price") + scale_fill_discrete(name = df_model$brand) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ guides(fill=FALSE)
+
+p2 <- ggplot(df_model, aes(x=fuel, y=log(selling_price), fill=fuel)) + 
+  geom_boxplot()+labs(title=paste0("Selling Price  by fuel type"),x= 'fuel', y = "log Selling Price") + scale_fill_discrete(name = df_model$fuel) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + guides(fill=FALSE)
+
+p3 <- ggplot(df_model, aes(x=owner, y=log(selling_price), fill=owner)) + 
+  geom_boxplot()+labs(title=paste0("Selling Price  by owner"),x= 'owner', y = "log Selling Price") + scale_fill_discrete(name = df_model$owner) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + guides(fill=FALSE)
+
+p4 <- ggplot(df_model, aes(x=seller_type, y=log(selling_price), fill=seller_type)) + 
+  geom_boxplot()+labs(title=paste0("Selling Price  by seller_type"),x= 'seller_type', y = "log Selling Price") + scale_fill_discrete(name = df_model$seller_type) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + guides(fill=FALSE)
+
+p5 <- ggplot(df_model, aes(x=transmission, y=log(selling_price), fill=transmission)) + 
+  geom_boxplot()+labs(title=paste0("Selling Price  by transmission"),x= "transmission", y = "log Selling Price")  + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + guides(fill=FALSE)
+
+grid.arrange(p2,p3,p4,p5,ncol = 2)
+```
+```{r}
+p1
+```
+
+```{r}
+library(dplyr)
+df_model%>%
+group_by(brand)%>%
+count()%>%
+arrange(desc(n))%>%
+filter(n >90)%>%
+ggplot()+geom_col(aes(x=n,y=reorder(brand,n),fill=brand),show.legend = FALSE)+
+geom_label(aes(y = reorder(brand,n), x = n, label = paste(round((n/sum(n))*100,2),'%')))+
+labs(title = 'Percentage share of Brands',
+     subtitle = '',
+    x= 'Percentage Share',
+    y='Company')
+```
+
+```{r}
+num_cols['log_sp'] <- log(num_cols$selling_price)
+library(psych)
+pairs.panels(num_cols, 
+             method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = T,  # show density plots
+             ellipses = TRUE # show correlation ellipses
+             )
+
+
+```
+
+```{r,fig.height=4}
+library(ggpubr)
+p1 <- ggplot(df_model[df_model$km_driven < 5e5,], aes(x = km_driven, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
+
+p2 <- ggplot(df_model, aes(x = age, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
+
+p3 <- ggplot(df_model, aes(x = seats, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
+
+p4 <- ggplot(df_model, aes(x = engine_cc, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
+
+p5 <- ggplot(df_model, aes(x = max_power_bhp, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
+
+p6 <- ggplot(df_model, aes(x = mileage_kmpl, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
+
+grid.arrange(p1,p2,p3,p4,p5,p6,ncol = 2)
+
+# grid.arrange(p3,p4,ncol = 2)
+# 
+# grid.arrange(p5,p6,ncol = 2)
+
+```
+```{r}
+df_model[df_model$km_driven >= 1400000,]
+```
+
+
+## Train and Test Split
+
+```{r}
+## 75% of the sample size
+smp_size <- floor(0.90 * nrow(df_model))
+
+## set the seed to make your partition reproducible
+set.seed(123)
+train_ind <- sample(seq_len(nrow(df_model)), size = smp_size)
+
+train <- df_model[train_ind, ]
+test <- df_model[-train_ind, ]
+
+dim(df_model)
+dim(train)
+dim(test)
+```
+
+
+
+#### Base Model (M0)
+```{r}
+library(nortest)
+options(scipen = 999)
+model0 <- lm(selling_price ~ .,data = train)
+par(mfrow = c(2,2))
+plot(model0, which = 1:2)
+
+ncvTest(model0)
+ad.test(resid(model0))
+vif(model0)
+
+plot(resid(model0))
+```
+```{r}
+summary(model0)
+```
+
+
+### Transformation
+
+#### Predictor
+
+```{r}
+pt <- powerTransform(cbind(df_model$age,df_model$km_driven,df_model$engine_cc,df_model$max_power_bhp,(df_model$mileage_kmpl + 1)) ~ 1)
+summary(pt)
+```
+
+#### Response
+```{r}
+
+model_tra <- lm(selling_price ~ I(train$age ^0.25) + I(train$km_driven ^0.31)+  I(train$engine_cc^-0.74) + I(train$max_power_bhp^-.43) + I(train$mileage_kmpl^1.10) + train$brand + train$fuel + train$owner + train$seller_type, data = train)
+boxCox(model_tra, lambda=seq(-2, 2, by=0.5))
+
+ad.test(resid(model_tra))
+ncvTest(model_tra)
+```
+
+#### Transformed Model (model 1)
+```{r}
+model_transf <- lm(log(selling_price) ~ I(train$age ^0.25) + I(train$km_driven ^0.31)+  I(train$engine_cc^-0.74) + I(train$max_power_bhp^-.43) + I((train$mileage_kmpl + 1)^1.10) + train$brand + train$fuel + train$owner + train$seller_type, data = train)
+
+par(mfrow = c(2,2))
+plot(model_transf, which = 1:2)
+
+ncvTest(model_transf)
+ad.test(resid(model_transf))
+vif(model_transf)
+```
+
+```{r}
+summary(model_transf)
+```
+
+#### model2
+
+```{r}
+model1 <- lm(log(selling_price)  ~  .,data = train)
+
+par(mfrow = c(2,2))
+plot(model1, which = 1:2)
+
+ncvTest(model1)
+ad.test(resid(model1))
+vif(model1)
+```
+
+```{r}
+summary(model1)
+
+```
+
+## Variable Selection 
+
+#### Backward BIC
+
+```{r}
+mod.0 <- lm(selling_price ~ 1, data = train)
+n <- length(train$selling_price)
+step(model0, scope = list(lower = mod.0, upper = model0), direction = 'backward',trace = 0,k = log(n))
+
+```
+```{r}
+step(model0, scope = list(lower = mod.0, upper = model0), direction = 'backward',trace = 0)
+
+```
+
+
+```{r}
+mod.0 <- lm(log(selling_price) ~ 1, data = train)
+n <- length(train$selling_price)
+step(model1, scope = list(lower = mod.0, upper = model1), direction = 'backward',trace = 0,k = log(n))
+
+```
+#### Backward AIC
+
+```{r}
+step(model1, scope = list(lower = mod.0, upper = model1), direction = 'backward',trace = 0)
+```
+### Stepwise
+```{r}
+step(mod.0, scope = list(lower = mod.0, upper = model1, trace = 0))
+```
+
+
+
+### Anova to Compare Backward and Forward Model
+
+
+
+
+```{r}
+model_backward_bic <- lm(log(selling_price) ~ age + brand + km_driven + fuel + 
+    transmission + owner + seats + engine_cc + max_power_bhp,data = train)
+
+
+model_backward_aic <- lm(log(selling_price) ~  age + brand + km_driven + fuel + 
+    seller_type + transmission + owner + seats + engine_cc + 
+    max_power_bhp,data = train)
+
+```
+
+```{r}
+anova(model_backward_bic,model_backward_aic)
+```
+```{r}
+anova(model_backward_aic,model1)
+```
+
+
+### Model after removing insignificant variable
+#### model3
+```{r}
+model_sub <- lm(log(selling_price) ~ age + brand + km_driven + fuel + seller_type + 
+    transmission + owner + seats + engine_cc + max_power_bhp, data = train)
+summary(model_sub)
+
+#relevel(b, ref = "3")
+par(mfrow = c(2,2))
+plot(model_sub, which = 1:2)
+
+ncvTest(model_sub)
+ad.test(resid(model_sub))
+vif(model_sub)
+```
+```{r}
+summary(model_sub)
+```
+```{r}
+model_col <- lm(log(selling_price) ~ age + brand + km_driven + fuel + seller_type + 
+    transmission + owner + seats  + max_power_bhp, data = train)
+summary(model_col)
+```
+
+
+
+## Leverage points
+```{r}
+
+p <- ncol(train) - 1
+n <- nrow(train)
+nyc.hats <- hatvalues(model_col)
+sum(nyc.hats)
+
+nyc.std <- rstandard(model_col)
+
+plot(hatvalues(model_col), rstandard(model_col),
+xlab='Leverage', ylab='Standardized Residuals')
+abline(v = 3*(p+1)/n , lty = 2, lwd = 2, col = "red")
+abline(h = c(-2, 2), lty = 2, lwd = 2, col = "blue")
+
+
+```
+
+#### model4
+```{r}
+influenceIndexPlot(model_col)
+```
+
+
+```{r}
+check <- train[train$rownames %in% c(1811,6221,4384),]
+check
+```
+
+```{r}
+check <- train[train$selling_price > 100000,]
+check
+```
+
+```{r}
+check <- train[train$selling_price > 100000,]
+check
+```
+
+```{r}
+summary(powerTransform(model0))
+```
+
+
+
+```{r}
+
+train$rownames <- rownames(train)
+train_new <- train[!train$rownames %in% c(1811,8043,6221,4384),]
+
+
+model3 <- lm(log(train_new$selling_price) ~ age + brand + km_driven + fuel + seller_type + 
+    transmission + owner + max_power_bhp+ seats ,data = train_new)
+summary(model3)
+
+par(mfrow = c(2,2))
+plot(model3,1:4)
+
+nrow(train)  - nrow(train_new)
+
+influenceIndexPlot(model3)
+
+ad.test(rstandard(model3))
+ncvTest(model3)
+vif(model3)
+```
+```{r}
+summary(model3)
+
+```
+
+
+### Weighted Least Square model4
+
+```{r}
+par(mfrow = c(1,2))
+plot(train_new$age,residuals(model3))
+
+plot(train_new$max_power_bhp,residuals(model3))
+
+# plot(residuals(model3),train_new$km_driven)
+# 
+# 
+# 
+# plot(residuals(model3),train_new$seats)
+```
+
+
+```{r}
+wts <- 1/fitted(lm(abs(residuals(model3)) ~ train_new$age  + train_new$max_power_bhp ))^2
+model_final <- lm(log(selling_price) ~age + brand + km_driven + fuel + seller_type + 
+    transmission + owner + max_power_bhp  + seats  ,data = train_new, weights = wts)
+
+summary(model_final)
+par(mfrow = c(2,2))
+plot(model_final,1:4)
+
+
+influenceIndexPlot(model_final)
+
+library(nortest)
+ad.test(rstandard(model_final))
+ncvTest(model_final)
+hist(resid(model_final))
+vif(model_final)
+```
+
+```{r}
+summary(model_final)
+```
+
+```{r}
+round(confint(model_final),6)
+```
+
+
+### Model Validation
+```{r}
+train_new['predict_selling_price'] <- exp(predict(model_final,train_new))
+train_new['percent_diff'] <- abs((train_new['selling_price'] - train_new['predict_selling_price'] )/train_new['selling_price']) * 100
+
+mean(train_new$percent_diff)
+ggplot(train_new, aes(x = selling_price, y = predict_selling_price)) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson") + scale_y_continuous(labels = scales::comma) + scale_x_continuous(labels = scales::comma) + ggtitle("Train Actual Predicted Correlation") + scale_y_continuous(labels = scales::dollar) + scale_x_continuous(labels = scales::dollar)
+```
+
+```{r}
+test['predict_selling_price'] <- exp(predict(model_final,test))
+test['percent_diff'] <- round(abs((test['selling_price'] - test['predict_selling_price'] )/test['selling_price']) * 100,2)
+mean(test$percent_diff)
+ggplot(test, aes(x = selling_price, y = predict_selling_price)) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson") + scale_y_continuous(labels = scales::comma) + scale_x_continuous(labels = scales::comma) + ggtitle("Test Actual Predicted Correlation") + scale_y_continuous(labels = scales::dollar) + scale_x_continuous(labels = scales::dollar)
+```
+#### Add Prediction Interval
+```{r}
+library(ciTools)
+library(data.table)
+
+pi_df <- test[test$percent_diff < 5,]
+pi_df <- add_ci(pi_df, model_final)
+setnames(pi_df,old = c("LCB0.025","UCB0.975"),new = c("lower_ci","upper_ci"))
+pi_df$lower_ci = exp(pi_df$lower_ci)
+pi_df$upper_ci = exp(pi_df$upper_ci)
+pi_df$pred <- NULL
+pi_df <- add_pi(pi_df, model_final)
+setnames(pi_df,old = c("LPB0.025","UPB0.975"),new = c("lower_pi","upper_pi"))
+pi_df$pred <- NULL
+pi_df$lower_pi = exp(pi_df$lower_pi)
+pi_df$upper_pi = exp(pi_df$upper_pi)
+pi_df
+```
+
+
+
+#### Variance Importance Plot
+
+```{r}
+library(caret)
+var_imp <- varImp(model_final)
+
+ggplot(var_imp, aes(x= Overall, y=reorder(rownames(var_imp),Overall), fill=rownames(var_imp) )) +
+  geom_bar(stat="identity")+theme_minimal() + guides(fill=FALSE) + labs(title=paste0("Variable Importance Plot"),y= "features") + xlab("score")
+
+```
+
+
