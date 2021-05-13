@@ -1,5 +1,6 @@
 ---
-title: "Project"
+title: "Analysis of Used Cars in India(CarDekho)"
+author: "Deeksha Shukla"
 output:
   html_document:
     df_print: paged
@@ -11,10 +12,27 @@ output:
     toc_depth: 4
 ---
 
+```{r global-options,include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
 
-## 
+## Abstract  
 
-```{r}
+This project utilizes linear regression analysis to examine the determinants of used cars price in India. The primary determinants  of used cars price appear to be age of the car, maximum power and brand.As car's age and power increase used car's price increases.Price significantly differ among  brands. No of seats and engine size do not appear to be important variables for used car price prediction.There is not enough variation in number of car seats.Most of cars have 5 seats.Engine size and power are correlated to each other so engine size removed in variable selection process.
+  
+
+## Problem and Motivation 
+
+The objective of the project is to understand key predictors of used cars selling price and  develop a multiple linear Regression model to predict used car price.Historical data from CarDekho.com is used to understand relationship between cars selling price and multiple available predictors , this vehicle dataset includes information about used cars listed on CarDekho.com. CarDekho.com is a platform where customers buy and sell new and used cars.This model will help sellers and buyers to know baseline price for their used car.
+
+## Data Description 
+
+The data set is available on Kaggle from CarDekho.com. The data is in a CSV file which includes the following columns: model, year, selling price, kilometers driven, fuel type, seller type,seats, transmission, number of previous owners,mileage, engine size,seller type and torque
+
+#### Read Data 
+
+```{r,echo=FALSE}
 df <- read.csv("/Users/dshukla/MS/Regression/project/car_dekho.csv")
 library(stringr)
 library(ggplot2)
@@ -23,11 +41,21 @@ library(grid)
 library(car)
 ```
 
-```{r}
-head(df); str(df)
+The structure of the data set shows there are few variables like  mileage,engine,max_power have units in the values. These fields should be numeric.
+
+```{r,echo=FALSE}
+ str(df)
 ```
-### Data Preproccessing
-```{r}
+### Data Preproccessing  
+
+There are 4 data manipulation tasks done here,
+
+1. Removed character values (units) from numeric columns (engine,mileage,max power)   
+2. age of car has been calculated by subtracting 2021 - year     
+3. Selling price converted from INR to dollars for understanding purpose   
+4. Model name brand has been extracted    
+
+```{r,echo=FALSE}
 library(tidyr)
 
 df$engine_cc <- as.numeric(str_split_fixed(df$engine, " ", 2)[,1])
@@ -38,17 +66,28 @@ df$age=  2021- as.numeric(df$year)
 df$selling_price <- df$selling_price/73.78
 ```
 
-### EDA
-```{r}
+
+
+The cleaned data set has engine,mileage,max power as numeric variables.
+
+```{r,echo=FALSE}
 
 variables <- c("age","brand","km_driven","fuel","seller_type","transmission","owner","seats","engine_cc","max_power_bhp","mileage_kmpl","selling_price")
 df_clean <- df[,variables]
 
 str(df_clean)
 ```
+## Questions of Interest:  
 
+1. What are the most important predictor of used cars?
+2. How well Regression model can predict used cars price ?
+
+## EDA 
 ### Check for NA's
-```{r}
+
+~3% observations are na in the data set. The data set has enough observations so I prefer to drop the observations.
+
+```{r,echo=FALSE}
 num_cols <- df_clean[,sapply(df_clean,is.numeric)]
 summary(num_cols)
 
@@ -58,71 +97,61 @@ na.df = data.frame( variable = names(na.val),
 print(na.df)
 ```
 
-
-
-```{r}
+```{r, echo=FALSE}
 library(dplyr)
 imp_brand <- df_clean %>% group_by(brand)%>% count() %>%arrange(desc(n)) %>% filter(n > 50)
 df_model_clean <- df_clean[df_clean$brand %in% unique(imp_brand$brand),]
 dim(df_model_clean)
 df_model <- df_model_clean[!is.na(df_model_clean$seats) & !is.na(df_model_clean$max_power_bhp),]
 dim(df_model)
-
-
 ```
-```{r}
-check <- df_model_clean[is.na(df_model_clean$seats) & is.na(df_model_clean$max_power_bhp),]
-head(check)
-```
-```{r}
+### Check Extreme Values
+
+Car priced $406 seems unusual.However these cars are very old. It is possible their price is so low.
+The car priced 135 K seems price of new car.  
+The car with km driven 1 km does not seem correct because age of the car is wo years.
+
+I will not remove these observations. Let's see if these observations are flagged as outlier in Regression analysis.
+
+```{r,echo=FALSE}
 
 df_model[df_model$selling_price < 407,]
 
 df_model[df_model$selling_price > 130000,]
 
-```
-
-```{r}
-str(df_model_clean)
-```
-
-```{r}
 df_model_clean[df_model_clean$km_driven < 2, ]
-```
-```{r}
-df_model_clean[df_model_clean$km_driven > 1000000, ]
+
 ```
 
+### Categorical Variables distribution  
 
-### Categorical columns distribution
-```{r}
+Most of the variables categories have enough observations except Test Drive Car. There are only 2 Test Drive Cars.
+
+```{r,echo=FALSE}
 cat_cols <- df_model[,sapply(df_model,is.character)]
 lapply(cat_cols, function(x) table(x))
 ```
+### Response Distribution  
 
-```{r}
+Selling Price distribution is right skewed.Log transformation can help in making distribution approx normal.
+
+```{r,echo=FALSE}
 par(mfrow = c(1,2))
 hist(df_model$selling_price, main= paste("selling_price"), breaks = 50,probability = TRUE)
 
 hist(log(df_model$selling_price), main= paste("log of selling_price"), breaks = 50,probability = TRUE)
 ```
+### Response and Categorical Variables  
 
-```{r}
-# library(hrbrthemes)
-# 
-# for  (feature in colnames(cat_cols)) {
-#   
-# p <-  (ggplot(data=df_model, aes(x= log(selling_price), group= df_model[,feature], fill=df_model[,feature])) +
-#     geom_density() +
-#     theme_ipsum()) 
-# 
-# print(p + scale_fill_discrete(name = feature))
-# }
-```
+**Fuel**: Diesel Cars are more expensive than Petrol cars.Diesel and Petrol cars have many extreme values. 
+**Owner**: Test Drive Car's price is the highest. There are only 2 Test drive cars.These car seems outliers.First owner car has many extreme values.  
 
-```{r,fig.width=7,fig.height=4.4}
-p1 <- ggplot(df_model, aes(x=brand, y=log(selling_price), fill=brand)) + 
-  geom_boxplot()+labs(title=paste0("Selling Price  by brand"),x= 'brand', y = "log Selling Price") + scale_fill_discrete(name = df_model$brand) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ guides(fill=FALSE)
+**Seller Type**: Cars listed by dealer are more expensive than Individual.Howver standard deviation for cars listed by Individual looks higher.  
+
+**Transmission**: Automatic cars are more expensive than manual.
+
+```{r,fig.width=7,fig.height=4.4,echo=FALSE}
+
 
 p2 <- ggplot(df_model, aes(x=fuel, y=log(selling_price), fill=fuel)) + 
   geom_boxplot()+labs(title=paste0("Selling Price  by fuel type"),x= 'fuel', y = "log Selling Price") + scale_fill_discrete(name = df_model$fuel) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + guides(fill=FALSE)
@@ -138,11 +167,12 @@ p5 <- ggplot(df_model, aes(x=transmission, y=log(selling_price), fill=transmissi
 
 grid.arrange(p2,p3,p4,p5,ncol = 2)
 ```
-```{r}
-p1
-```
+**Brand**: BMW is the most expensive car. Jaguar, Mercedes-Benz and Volvo are luxury cars with comparable prices.  
+Maruti is the highest selling car in India.  
+```{r,echo=FALSE}
+ggplot(df_model, aes(x=brand, y=log(selling_price), fill=brand)) + 
+  geom_boxplot()+labs(title=paste0("Selling Price  by brand"),x= 'brand', y = "log Selling Price") + scale_fill_discrete(name = df_model$brand) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ guides(fill=FALSE)
 
-```{r}
 library(dplyr)
 df_model%>%
 group_by(brand)%>%
@@ -156,8 +186,13 @@ labs(title = 'Percentage share of Brands',
     x= 'Percentage Share',
     y='Company')
 ```
+### Response and Continous Variables  
 
-```{r}
+Power has highest positive correlation with selling price (+73%).  
+Age has highest negative correlation with selling price (-70%).  
+engine size has high correlation with seats and power.
+
+```{r,echo=FALSE}
 num_cols['log_sp'] <- log(num_cols$selling_price)
 library(psych)
 pairs.panels(num_cols, 
@@ -170,33 +205,16 @@ pairs.panels(num_cols,
 
 ```
 
-```{r,fig.height=4}
-library(ggpubr)
-p1 <- ggplot(df_model[df_model$km_driven < 5e5,], aes(x = km_driven, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
-
-p2 <- ggplot(df_model, aes(x = age, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
-
-p3 <- ggplot(df_model, aes(x = seats, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
-
-p4 <- ggplot(df_model, aes(x = engine_cc, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
-
-p5 <- ggplot(df_model, aes(x = max_power_bhp, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
-
-p6 <- ggplot(df_model, aes(x = mileage_kmpl, y = log(selling_price))) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson")
-
-grid.arrange(p1,p2,p3,p4,p5,p6,ncol = 2)
-
-# grid.arrange(p3,p4,ncol = 2)
-# 
-# grid.arrange(p5,p6,ncol = 2)
-
-```
-```{r}
-df_model[df_model$km_driven >= 1400000,]
-```
 
 
-## Train and Test Split
+## Model Development
+
+### Train and Test Split  
+
+Split the data set in train and test. Train data set will be used to fit the model and test data set will be used to test performance of model on unseen data set.90% observations are in training and 10% for testing.  
+
+**Train Observations :** 7713
+**Test Observations :** 772
 
 ```{r}
 ## 75% of the sample size
@@ -209,14 +227,24 @@ train_ind <- sample(seq_len(nrow(df_model)), size = smp_size)
 train <- df_model[train_ind, ]
 test <- df_model[-train_ind, ]
 
-dim(df_model)
-dim(train)
-dim(test)
+# dim(df_model)
+# dim(train)
+# dim(test)
 ```
 
+#### Model Selection  
 
 
-#### Base Model (M0)
+
+![](model_sum.png)
+
+
+#### Full Model (M0)  
+
+First model is the full model without transformation. 
+Anderson-Darling normality test has been used to test normality as Shapiro test expects only 5000 records. Normality and ncv test did not pass. Residual vs fitted plot shows non constant variance and pattern so linearity and constant variance assumptions violated. 
+However model is able to explain 83% variation in selling price.
+
 ```{r}
 library(nortest)
 options(scipen = 999)
@@ -227,36 +255,102 @@ plot(model0, which = 1:2)
 ncvTest(model0)
 ad.test(resid(model0))
 vif(model0)
-
-plot(resid(model0))
 ```
 ```{r}
 summary(model0)
 ```
 
+#### Variable Selection  
+Variable selection is the first step as data has 11 independent variables. It will help us in removing not important variables from the model.  
+I used backward model selection method with AIC and BIC. Both method suggests same model. seats and engine_cc variables have been removed in variable selection process.
+
+```{r}
+mod.0 <- lm(selling_price ~ 1, data = train)
+n <- length(train$selling_price)
+step(model0, scope = list(lower = mod.0, upper = model0), direction = 'backward',trace = 0,k = log(n))
+
+```
+```{r}
+mod.0 <- lm(selling_price ~ 1, data = train)
+n <- length(train$selling_price)
+step(model0, scope = list(lower = mod.0, upper = model0), direction = 'backward',trace = 0)
+
+```
+
+
+
+#### Analyse removed variables 
+Let's try to understand why seats and engize removed from the model.
+Seats variable doesn't have enough variation, most of the cars are 5 seater so can't explain much about variation in cars selling price.   
+engine_cc is highly correlated with mileage so removed in variable selection process.   
+
+We are not loosing information by removing these two varibles.
+
+```{r}
+hist(df_clean$seats)
+
+plot(df_clean$engine_cc,df_clean$max_power_bhp)
+
+```
+#### Model1  
+
+Model after variable selection. engine_cc and seats removed from the model.Multicollinearity problem has been resolved after removing engine_cc variable from the data set.  
+Model still doesn't pass assuptions.Next we will try transformation of variables.  
+
+```{r}
+model1 <- lm(selling_price ~ age + brand + km_driven + fuel + 
+    seller_type + transmission + owner + max_power_bhp + mileage_kmpl,data = train)  
+
+summary(model1)
+par(mfrow = c(2,2))
+plot(model1, which = 1:2)
+
+ncvTest(model1)
+ad.test(resid(model1))
+vif(model1)
+```
+```{r}
+summary(model1)
+```
+
+#### Anova to compare full and reduced model  
+
+p value > 0.01 means smaller model is better.
+
+```{r}
+anova(model0,model1)
+```
 
 ### Transformation
 
-#### Predictor
+#### Predictor  
+Power Transform method used for independent variable transformation.p values are less than 0.01 so transformation so log transformation or no transformation will not work. We can try Rounded power of variables.
 
 ```{r}
-pt <- powerTransform(cbind(df_model$age,df_model$km_driven,df_model$engine_cc,df_model$max_power_bhp,(df_model$mileage_kmpl + 1)) ~ 1)
+pt <- powerTransform(cbind(df_model$age,df_model$km_driven,df_model$max_power_bhp,(df_model$mileage_kmpl + 1)) ~ 1)
 summary(pt)
 ```
 
-#### Response
+#### Response Transformation  
+
+Box Cox transformation used for Response variable transformation. As the max value is in the 95% confidence interval. log trnsformation can be applied to the response variable.  
+
 ```{r}
 
-model_tra <- lm(selling_price ~ I(train$age ^0.25) + I(train$km_driven ^0.31)+  I(train$engine_cc^-0.74) + I(train$max_power_bhp^-.43) + I(train$mileage_kmpl^1.10) + train$brand + train$fuel + train$owner + train$seller_type, data = train)
-boxCox(model_tra, lambda=seq(-2, 2, by=0.5))
-
+model_tra <- lm(selling_price ~ I(train$age ^0.25) + I(train$km_driven ^0.31)+  I(train$engine_cc^-0.74) + I(train$max_power_bhp^-.18) + I(train$mileage_kmpl^1.17) + train$brand + train$fuel + train$owner + train$seller_type, data = train)
+boxCox(model_tra, lambda=seq(-3, 3, by=0.5))
 ad.test(resid(model_tra))
 ncvTest(model_tra)
 ```
 
-#### Transformed Model (model 1)
+#### Transformed Model (model 2)  
+
+Response and Predictor variables transformed as suggested by boxCox and poweTransform method. 
+Residual vs fitted and qq plot look much better now. However ncv test and ad test did not pass. 
+
 ```{r}
-model_transf <- lm(log(selling_price) ~ I(train$age ^0.25) + I(train$km_driven ^0.31)+  I(train$engine_cc^-0.74) + I(train$max_power_bhp^-.43) + I((train$mileage_kmpl + 1)^1.10) + train$brand + train$fuel + train$owner + train$seller_type, data = train)
+model_transf <- lm(log(selling_price) ~ I(train$age ^0.24) + I(train$km_driven ^0.31)+ I(train$max_power_bhp^-.43) + I((train$mileage_kmpl + 1)^1.10) + train$brand + train$fuel + train$owner + train$seller_type + train$transmission, data = train)
+
 
 par(mfrow = c(2,2))
 plot(model_transf, which = 1:2)
@@ -272,127 +366,51 @@ summary(model_transf)
 
 #### model2
 
+The previous model looks a bit complicated due to transformed predictor.Let's try just response transformation.Residual and qq plot looks similar to previous model so I will prefer model without predictor transformation.This model has higher adjusted R square(90.4%) than previous model.
+
 ```{r}
-model1 <- lm(log(selling_price)  ~  .,data = train)
+model2 <- lm(log(selling_price)  ~  age + brand + km_driven + fuel + 
+    seller_type + transmission + owner + max_power_bhp + mileage_kmpl,data = train)
 
 par(mfrow = c(2,2))
-plot(model1, which = 1:2)
+plot(model2, which = 1:2)
 
-ncvTest(model1)
-ad.test(resid(model1))
-vif(model1)
+ncvTest(model2)
+ad.test(resid(model2))
+vif(model2)
 ```
 
 ```{r}
-summary(model1)
-
-```
-
-## Variable Selection 
-
-#### Backward BIC
-
-```{r}
-mod.0 <- lm(selling_price ~ 1, data = train)
-n <- length(train$selling_price)
-step(model0, scope = list(lower = mod.0, upper = model0), direction = 'backward',trace = 0,k = log(n))
-
-```
-```{r}
-step(model0, scope = list(lower = mod.0, upper = model0), direction = 'backward',trace = 0)
+summary(model2)
 
 ```
 
 
-```{r}
-mod.0 <- lm(log(selling_price) ~ 1, data = train)
-n <- length(train$selling_price)
-step(model1, scope = list(lower = mod.0, upper = model1), direction = 'backward',trace = 0,k = log(n))
-
-```
-#### Backward AIC
-
-```{r}
-step(model1, scope = list(lower = mod.0, upper = model1), direction = 'backward',trace = 0)
-```
-### Stepwise
-```{r}
-step(mod.0, scope = list(lower = mod.0, upper = model1, trace = 0))
-```
 
 
+#### Leverage points  
+Let's look at outliers and high or bad leverage points in the data set and see if removing those points help in passing regression assumptions.
 
-### Anova to Compare Backward and Forward Model
-
-
-
-
-```{r}
-model_backward_bic <- lm(log(selling_price) ~ age + brand + km_driven + fuel + 
-    transmission + owner + seats + engine_cc + max_power_bhp,data = train)
-
-
-model_backward_aic <- lm(log(selling_price) ~  age + brand + km_driven + fuel + 
-    seller_type + transmission + owner + seats + engine_cc + 
-    max_power_bhp,data = train)
-
-```
-
-```{r}
-anova(model_backward_bic,model_backward_aic)
-```
-```{r}
-anova(model_backward_aic,model1)
-```
-
-
-### Model after removing insignificant variable
-#### model3
-```{r}
-model_sub <- lm(log(selling_price) ~ age + brand + km_driven + fuel + seller_type + 
-    transmission + owner + seats + engine_cc + max_power_bhp, data = train)
-summary(model_sub)
-
-#relevel(b, ref = "3")
-par(mfrow = c(2,2))
-plot(model_sub, which = 1:2)
-
-ncvTest(model_sub)
-ad.test(resid(model_sub))
-vif(model_sub)
-```
-```{r}
-summary(model_sub)
-```
-```{r}
-model_col <- lm(log(selling_price) ~ age + brand + km_driven + fuel + seller_type + 
-    transmission + owner + seats  + max_power_bhp, data = train)
-summary(model_col)
-```
-
-
-
-## Leverage points
 ```{r}
 
 p <- ncol(train) - 1
 n <- nrow(train)
-nyc.hats <- hatvalues(model_col)
+nyc.hats <- hatvalues(model2)
 sum(nyc.hats)
 
-nyc.std <- rstandard(model_col)
+nyc.std <- rstandard(model2)
 
-plot(hatvalues(model_col), rstandard(model_col),
+plot(hatvalues(model2), rstandard(model2),
 xlab='Leverage', ylab='Standardized Residuals')
 abline(v = 3*(p+1)/n , lty = 2, lwd = 2, col = "red")
 abline(h = c(-2, 2), lty = 2, lwd = 2, col = "blue")
 
 
 ```
+observation 1811 has the high cooks distance  and 6221 & 4384 have high leverage. First we will remove 1811 then 6221 & 4384.
 
-#### model4
 ```{r}
-influenceIndexPlot(model_col)
+influenceIndexPlot(model2)
 ```
 
 
@@ -415,7 +433,9 @@ check
 summary(powerTransform(model0))
 ```
 
+#### Remove Outlier and High levergae observations  
 
+Even after removing Outliers and high leverage observations ncv test and normality did not pass. Next we will try weighted least square method.  
 
 ```{r}
 
@@ -423,8 +443,8 @@ train$rownames <- rownames(train)
 train_new <- train[!train$rownames %in% c(1811,8043,6221,4384),]
 
 
-model3 <- lm(log(train_new$selling_price) ~ age + brand + km_driven + fuel + seller_type + 
-    transmission + owner + max_power_bhp+ seats ,data = train_new)
+model3 <- lm(log(train_new$selling_price) ~ age + brand + km_driven + fuel + 
+    seller_type + transmission + owner + max_power_bhp + mileage_kmpl ,data = train_new)
 summary(model3)
 
 par(mfrow = c(2,2))
@@ -443,8 +463,22 @@ summary(model3)
 
 ```
 
+## Final Model
+### Weighted Least Square model4  
 
-### Weighted Least Square model4
+The method of weighted least squares can be used when the ordinary least squares assumption of constant variance in the errors is violated. 
+
+In WLS, an observation with small error variance has a large weight since it contains relatively more information than an observation with large error variance (small weight).Each weight is inversely proportional to the error variance, it reflects the information in that observation. 
+
+With car data set I analysed the predictor and residuals to see the variables have increasing variance. 
+age and power variable show high residual variance. 
+
+WLS method help in passing ncv test. 
+Residuals histogram seems approx normal as well.  
+
+90% variation in selling price can be explained by age, brand ,km_driven ,fuel, 
+seller_type, transmission, owner, max_power_bhp,  mileage_kmpl variables collectively.
+
 
 ```{r}
 par(mfrow = c(1,2))
@@ -452,50 +486,77 @@ plot(train_new$age,residuals(model3))
 
 plot(train_new$max_power_bhp,residuals(model3))
 
-# plot(residuals(model3),train_new$km_driven)
-# 
-# 
-# 
-# plot(residuals(model3),train_new$seats)
 ```
 
 
 ```{r}
 wts <- 1/fitted(lm(abs(residuals(model3)) ~ train_new$age  + train_new$max_power_bhp ))^2
-model_final <- lm(log(selling_price) ~age + brand + km_driven + fuel + seller_type + 
-    transmission + owner + max_power_bhp  + seats  ,data = train_new, weights = wts)
+model_final <- lm(log(selling_price) ~ age + brand + km_driven + fuel + 
+    seller_type + transmission + owner + max_power_bhp + mileage_kmpl  ,data = train_new, weights = wts)
 
 summary(model_final)
 par(mfrow = c(2,2))
-plot(model_final,1:4)
+plot(model_final,1:2)
 
 
 influenceIndexPlot(model_final)
-
-library(nortest)
 ad.test(rstandard(model_final))
 ncvTest(model_final)
 hist(resid(model_final))
 vif(model_final)
 ```
+#### Final Model Summary 
+
+Final model Summary shows,except fuelPetrol and seller_typeTrustmark Dealer all other variables are statistically significant.Direction/ sign of the all the coefficients makes sense.For example as age increases cars price decreases. BMW is the reference level which is an expensive brand that's why all other brands coefficient is negative.  
+
+t-test performed to analyse statistical significance of the parameters.
+Hypothesis testing done for each parameter.
+
+![ ](/Users/dshukla/MS/Regression/project/para_test.png)
 
 ```{r}
 summary(model_final)
 ```
+#### Parameters Confidence Interval 
+
+fuelPetrol and seller_typeTrustmark Dealer confidence interval includes 0. These variables are not statistically significant.However other levels of fuel and seller type are statistically significant so I did not remove these variables from the model.  
 
 ```{r}
 round(confint(model_final),6)
 ```
 
+#### Interpretation (Coefficients)
 
-### Model Validation
+Interpretation for important variables
+
+**Age:**  A unit increase in age is associated with a decrease in ln(Selling Price) by 0.11, when all other predictors are held fixed  
+**Max Power:** A unit increase in power is associated with a increase in ln(Selling Price) by 0.01 given all other variables kept constant   
+**km driven :** A unit increase in km is associated with a increase in ln(Selling Price) by -0.00000071 given all other variables kept constant   
+**Brand :** The BMW brand is the reference level. On average, BMW cars are more expensive relative to other brands given all other variables kept constant. The negative coefficients for other brands reflects the same   
+**Transmission :** On average Automatic cars are more expensive than Manual one given all other variables kept constant. Negative coefficient of Manual Car reflects the same   
+
+**fuel:* On average Diesel Car is more expensive than LPG and Petrol.    
+
+### Model Validation  
+
+Model Validation is done on test data. Test data is not included in model development.  
+MAPE(Mean absolute percentage erroe ) and correlation between actual & predicted price used to measure performance of model.   
+
+On train data actual and predicted are 96% correlated.Model is performing well on cars below $15,000. Cars above $15,000 are luxury cars. There is not enough data for luxury cars so model can't learn enough about luxury cars.
+
+MAPE of the model is 19.7% which seems reasonable. 
+
 ```{r}
+library(ggpubr)
 train_new['predict_selling_price'] <- exp(predict(model_final,train_new))
 train_new['percent_diff'] <- abs((train_new['selling_price'] - train_new['predict_selling_price'] )/train_new['selling_price']) * 100
 
 mean(train_new$percent_diff)
 ggplot(train_new, aes(x = selling_price, y = predict_selling_price)) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson") + scale_y_continuous(labels = scales::comma) + scale_x_continuous(labels = scales::comma) + ggtitle("Train Actual Predicted Correlation") + scale_y_continuous(labels = scales::dollar) + scale_x_continuous(labels = scales::dollar)
 ```
+On test data actual and predicted are 94% correlated which similar to train data.Smae as train data model is performing well on cars below $15,000. 
+
+MAPE on test data is ~20%. Model is able to generalize well on unseen data set.
 
 ```{r}
 test['predict_selling_price'] <- exp(predict(model_final,test))
@@ -503,7 +564,10 @@ test['percent_diff'] <- round(abs((test['selling_price'] - test['predict_selling
 mean(test$percent_diff)
 ggplot(test, aes(x = selling_price, y = predict_selling_price)) + geom_point(size=2, shape=23) + geom_smooth(method = "lm", se=FALSE, color="red", formula = y ~ x, size=1,fullrange=TRUE) + stat_cor(method = "pearson") + scale_y_continuous(labels = scales::comma) + scale_x_continuous(labels = scales::comma) + ggtitle("Test Actual Predicted Correlation") + scale_y_continuous(labels = scales::dollar) + scale_x_continuous(labels = scales::dollar)
 ```
-#### Add Prediction Interval
+#### Add Confidence and Prediction Interval on test data  
+
+Confidence and Prediction Interval has been calculate on test data. 
+
 ```{r}
 library(ciTools)
 library(data.table)
@@ -519,12 +583,26 @@ setnames(pi_df,old = c("LPB0.025","UPB0.975"),new = c("lower_pi","upper_pi"))
 pi_df$pred <- NULL
 pi_df$lower_pi = exp(pi_df$lower_pi)
 pi_df$upper_pi = exp(pi_df$upper_pi)
-pi_df
+head(pi_df,5)
+```
+#### Interpretation (CI and PI)
+
+This interpretation is for the car below cell.
+
+CI : The estimated mean selling price for cars with above parameters  is $7297 .We are 95% confident that for used cars with above parameters average selling price will be between $7146 and $7452 inches tall.
+
+PI : The predicted selling price  for a car  that has above parameters is $7297. We are 95% confident that the actual selling price of a car, with above parameters, is likely to be between $589 and $90312.
+
+As we can see prediction interval is much wider than confidence interval for this particular car.
+```{r}
+pi_df[46,]
 ```
 
 
+#### Variable Importance Plot  
 
-#### Variance Importance Plot
+The absolute value of the t-statistic for each model parameter is used to compute importance of variables.
+Top 3 most important variables are age of the car, power and it's brand.
 
 ```{r}
 library(caret)
@@ -534,5 +612,12 @@ ggplot(var_imp, aes(x= Overall, y=reorder(rownames(var_imp),Overall), fill=rowna
   geom_bar(stat="identity")+theme_minimal() + guides(fill=FALSE) + labs(title=paste0("Variable Importance Plot"),y= "features") + xlab("score")
 
 ```
+#### Conclusions  
+
+The most important variables for car price prediction are age,power and brand. Regression model is able to explain 90% of variation in selling price of the cars.Final model parameters signs makes business sense like  negative for age of the car and positive sign for the power. As age of the car increases it's price decreases or as power increases price increases.  
+
+MAPE(mean absolute percentage error) of model on train and test data is ~20% , the model is able to generalize well on unseen data.The correlation between Actual Selling Price and Predicted Selling Price shows that model is not doing well on luxury cars because of data sparsity .We can try scraping more data from website for luxury cars to enhance model performance.
+
+
 
 
